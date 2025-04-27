@@ -186,6 +186,31 @@ let moviesLoaded = false;
 let theaterIdToName = {};
 let currentMovies = []; // Store the movies for the current theater
 
+// Function to format the date
+function formatDate(date) {
+  const day = date.getDate();
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+
+  let suffix = 'th';
+  if (day === 1 || day === 21 || day === 31) {
+    suffix = 'st';
+  } else if (day === 2 || day === 22) {
+    suffix = 'nd';
+  } else if (day === 3 || day === 23) {
+    suffix = 'rd';
+  }
+
+  return `${month} ${day}${suffix} ${year}`;
+}
+
+// Set the current date in the specified format
+function setCurrentDate() {
+  const now = new Date();
+  const formattedDate = formatDate(now);
+  currentDateDiv.textContent = formattedDate;
+}
+
 // Fetch Theater Areas
 function fetchTheaters() {
     const url = 'https://www.finnkino.fi/xml/TheatreAreas/';
@@ -300,7 +325,7 @@ function displayAllMovies(movies) {
     });
 }
 
-// Format Date 
+// Format Date FOR MOVIES
 function formatDate(dateStr) {
     const options = {
         hour: '2-digit',
@@ -399,6 +424,34 @@ showAllButton.addEventListener('click', () => {
 fetchTheaters();
 loadAllMovies();
 
+// Function to format the date (only date)
+function formatDateOnly(date) {
+  const day = date.getDate();
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+
+  let suffix = 'th';
+  if (day === 1 || day === 21 || day === 31) {
+    suffix = 'st';
+  } else if (day === 2 || day === 22) {
+    suffix = 'nd';
+  } else if (day === 3 || day === 23) {
+    suffix = 'rd';
+  }
+
+  return `${month} ${day}${suffix} ${year}`;
+}
+
+// Set the current date in the specified format (only date)
+function setCurrentDateOnly() {
+  const now = new Date();
+  const formattedDate = formatDateOnly(now);
+  currentDateDiv.textContent = formattedDate;
+}
+
+
+// Set the current date when the page loads
+setCurrentDateOnly();
 
 </script>
 
