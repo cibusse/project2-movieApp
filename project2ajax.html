@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FinnKino Movies</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f2f2;
+      margin: 0;
+      padding: 20px;
+      position: relative;
+      min-height: 100vh;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 5px;
+    }
+
+    #currentDate {
+      text-align: center;
+      font-size: 18px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+
+    #controls {
+      margin: 20px auto;
+      text-align: center;
+      position: relative;
+    }
+
+    select, input, button {
+      padding: 10px;
+      margin: 10px 5px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    #inputWrapper {
+      display: inline-flex;
+      position: relative;
+      align-items: center;
+    }
+
+    #searchInput {
+      padding-right: 30px;
+      width: 220px;
+    }
+
+    #clearButton {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #aaa;
+    }
+
+    #clearButton:hover {
+      color: #555;
+    }
+
+    button {
+      background-color: lightgray;
+      color: black;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #bbb;
+    }
+
+    #errorMessage {
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      color: red;
+      margin-top: -5px;
+      margin-bottom: 10px;
+    }
+
+    #movies {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+      padding-bottom: 100px;
+    }
+
+    .movie {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+
+    .movie:hover {
+      transform: scale(1.02);
+    }
+
+    .movie img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+    }
+
+    .info {
+      margin-top: 10px;
+    }
+
+    .info h3 {
+      margin: 10px 0 5px 0;
+      font-size: 18px;
+      color: #555;
+    }
+
+    .info p {
+      margin: 5px 0;
+      color: #777;
+      font-size: 14px;
+    }
+
+    /* Scroll Arrow */
+    #scrollArrow {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      font-size: 26px;
+      color: #fff;
+      background: #555;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      text-align: center;
+      line-height: 50px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: background 0.3s, transform 0.3s;
+    }
+
+    #scrollArrow:hover {
+      background: #333;
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+
+<h1>🎬 FinnKino Movies</h1>
+<div id="currentDate"></div>
+
+<div id="controls">
+  <select id="theaterSelect">
+    <option value="">Select a Theater...</option>
+  </select>
+  <br>
+  <div id="inputWrapper">
+    <input type="text" id="searchInput" placeholder="Search for a movie...">
+    <button id="clearButton" title="Clear">&times;</button>
+  </div>
+  <button id="searchButton">Search</button>
+  <button id="showAllButton">Show All</button>
+  <div id="errorMessage"></div>
+</div>
+
+<div id="movies"></div>
+
+<div id="scrollArrow" title="Back to top">&#8679;</div>
+
+<script>
+
+const theaterSelect = document.getElementById('theaterSelect');
+const moviesContainer = document.getElementById('movies');
+const searchInput = document.getElementById('searchInput');
+const searchButton = document.getElementById('searchButton'); 
+const showAllButton = document.getElementById('showAllButton');
+const currentDateDiv = document.getElementById('currentDate');
+const errorMessage = document.getElementById('errorMessage');
+
+let allMovies = [];
+let moviesLoaded = false;
+let theaterIdToName = {};
+let currentMovies = []; // Store the movies for the current theater
+
+// Fetch Theater Areas
+function fetchTheaters() {
+    const url = 'https://www.finnkino.fi/xml/TheatreAreas/';
+
+    fetch(url)
+        .then(response => response.text())
+        .then(str => new window.DOMParser().parseFromString(str, "text/xml"))
+        .then(data => {
+            const theaters = data.getElementsByTagName('TheatreArea');
+            for (let theater of theaters) {
+                const id = theater.querySelector('ID').textContent;
+                const name = theater.querySelector('Name').textContent;
+
+                if (name !== "Pääkaupunkiseutu") { // skip groupings if needed
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = name;
+                    theaterSelect.appendChild(option);
+                    theaterIdToName[id] = name; // Store name for filtering
+                }
+            }
+        })
+        .catch(err => console.error('Error fetching theaters:', err));
+}
+
+// Fetch Movies based on selected Theater
+function fetchMovies(theaterId) {
+    const url = `https://www.finnkino.fi/xml/Schedule/?area=${theaterId}`;
+    moviesContainer.innerHTML = 'Loading movies...'; 
+
+    fetch(url)
+        .then(response => response.text())
+        .then(str => new window.DOMParser().parseFromString(str, "text/xml"))
+        .then(data => {
+            const shows = data.getElementsByTagName('Show');
+            let movies = [];
+
+            for (let show of shows) {
+                movies.push({
+                    title: show.querySelector('Title').textContent,
+                    start: show.querySelector('dttmShowStart').textContent,
+                    end: show.querySelector('dttmShowEnd').textContent,
+                    image: show.querySelector('EventSmallImagePortrait').textContent,
+                    id: show.querySelector('ID').textContent,
+                    genre: show.querySelector('Genres').textContent,
+                    language: show.querySelector('SpokenLanguage').textContent,
+                    length: show.querySelector('LengthInMinutes').textContent,
+                    theater: theaterIdToName[theaterId] // Store theater Name
+                });
+            }
+            currentMovies = movies; // Store the movies for this theater
+            displayMovies(movies);
+        })
+        .catch(err => console.error('Error fetching movies:', err));
+}
+
+// Display Movies
+function displayMovies(movies) {
+    moviesContainer.innerHTML = ''; // Clear previous
+
+    if (movies.length === 0) {
+        moviesContainer.innerHTML = "<p>Sorry, no matches for this search</p>"; // Error Message
+        return;
+    }
+
+    movies.forEach(movie => {
+        const movieDiv = document.createElement('div');
+        movieDiv.className = 'movie';
+
+        movieDiv.innerHTML = `
+            <img src="${movie.image}" alt="${movie.title}">
+            <div class="info">
+                <h3>${movie.title}</h3>
+                <p><strong>Start:</strong> ${formatDate(movie.start)}</p>
+                <p><strong>End:</strong> ${formatDate(movie.end)}</p>
+                <p><strong>Genre:</strong> ${movie.genre}</p>
+                <p><strong>Language(s):</strong> ${movie.language}</p>
+                <p><strong>Length:</strong> ${movie.length} min</p>
+            </div>
+        `;
+
+        moviesContainer.appendChild(movieDiv);
+    });
+}
+
+// Display All Movies (with Theater)
+function displayAllMovies(movies) {
+    moviesContainer.innerHTML = ''; // Clear previous
+    if (movies.length === 0) {
+        moviesContainer.innerHTML = "<p>Sorry, no matches for this search</p>"; // Error Message
+        return;
+    }
+
+    movies.forEach(movie => {
+        const movieDiv = document.createElement('div');
+        movieDiv.className = 'movie';
+
+        movieDiv.innerHTML = `
+            <img src="${movie.image}" alt="${movie.title}">
+            <div class="info">
+                <h3>${movie.theater}</h3>
+                <h3>${movie.title}</h3>
+                <p><strong>Start:</strong> ${formatDate(movie.start)}</p>
+                <p><strong>End:</strong> ${formatDate(movie.end)}</p>
+                <p><strong>Genre:</strong> ${movie.genre}</p>
+                <p><strong>Language(s):</strong> ${movie.language}</p>
+                <p><strong>Length:</strong> ${movie.length} min</p>
+            </div>
+        `;
+
+        moviesContainer.appendChild(movieDiv);
+    });
+}
+
+// Format Date 
+function formatDate(dateStr) {
+    const options = {
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    return new Date(dateStr).toLocaleTimeString([], options);
+}
+
+// Event Listeners
+theaterSelect.addEventListener('change', () => {
+    errorMessage.textContent = '';
+    if (theaterSelect.value) {
+        fetchMovies(theaterSelect.value);
+    } else {
+        moviesContainer.innerHTML = ''; // Clear if no theater selected
+        currentMovies = []; // Also clear stored movies
+    }
+});
+
+// Clear button 
+clearButton.addEventListener('click', () => {
+    searchInput.value = '';
+    errorMessage.textContent = '';
+    moviesContainer.innerHTML = '';
+    theaterSelect.value = '';
+    currentMovies = []; // clear stored movies
+});
+
+// Search
+searchInput.addEventListener('input', () => {
+    errorMessage.textContent = '';
+    const searchTerm = searchInput.value.toLowerCase();
+
+    let filteredMovies;
+    if (theaterSelect.value) {
+        // Filter from current theater's movies
+        filteredMovies = currentMovies.filter(movie =>
+            movie.title.toLowerCase().includes(searchTerm)
+        );
+        displayMovies(filteredMovies);
+    } else {
+        // If no theater is selected, filter from all movies
+        filteredMovies = allMovies.filter(movie =>
+            movie.title.toLowerCase().includes(searchTerm)
+        );
+        displayAllMovies(filteredMovies);
+    }
+});
+
+// Load all movies initially, but don't display them
+function loadAllMovies() {
+    const url = 'https://www.finnkino.fi/xml/Schedule/';
+    fetch(url)
+        .then(response => response.text())
+        .then(str => new window.DOMParser().parseFromString(str, "text/xml"))
+        .then(data => {
+            const shows = data.getElementsByTagName('Show');
+            allMovies = []; // clear previous movies
+            for (let show of shows) {
+                allMovies.push({
+                    title: show.querySelector('Title').textContent,
+                    start: show.querySelector('dttmShowStart').textContent,
+                    end: show.querySelector('dttmShowEnd').textContent,
+                    image: show.querySelector('EventSmallImagePortrait').textContent,
+                    id: show.querySelector('ID').textContent,
+                    genre: show.querySelector('Genres').textContent,
+                    language: show.querySelector('SpokenLanguage').textContent,
+                    length: show.querySelector('LengthInMinutes').textContent,
+                    theater: show.querySelector('Theatre').textContent
+                });
+            }
+            moviesLoaded = true;
+        })
+        .catch(err => console.error('Error fetching all movies:', err));
+}
+
+// Show All 
+showAllButton.addEventListener('click', () => {
+    errorMessage.textContent = '';
+    const searchTerm = searchInput.value.trim().toLowerCase();
+
+    if (!searchTerm) {
+        errorMessage.textContent = 'Please enter a movie name';
+        return;
+    }
+
+    // Filter movies from ALL movies
+    const filteredMovies = allMovies.filter(movie =>
+        movie.title.toLowerCase().includes(searchTerm)
+    );
+
+    displayAllMovies(filteredMovies); // Use the displayAllMovies function
+});
+
+// Initialize
+fetchTheaters();
+loadAllMovies();
+
+
+</script>
+
+</body>
+</html>
